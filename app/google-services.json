@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "206481246444",
+    "firebase_url": "https://cargardriver.firebaseio.com",
+    "project_id": "cargardriver",
+    "storage_bucket": "cargardriver.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:206481246444:android:9f50c1e291769308",
+        "android_client_info": {
+          "package_name": "com.example.hp.cargardriver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "206481246444-o64599dqkg8vsmndcnmns7gev6iubd5m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.hp.cargardriver",
+            "certificate_hash": "2BD52FE17F999E52CB2E1C470D3C45D2C6A9B928"
+          }
+        },
+        {
+          "client_id": "206481246444-5mjgr8hj8v3khb96fm184hpvvr571uol.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOW6jLJyi3IRQyi4e6mY2P4Fo5QXf-Xm8"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 2,
+          "other_platform_oauth_client": [
+            {
+              "client_id": "206481246444-5mjgr8hj8v3khb96fm184hpvvr571uol.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        },
+        "ads_service": {
+          "status": 2
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
