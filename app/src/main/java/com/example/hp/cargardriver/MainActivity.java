@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -14,7 +16,13 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.firebase.database.FirebaseDatabase;
 
@@ -27,8 +35,14 @@ public class MainActivity extends AppCompatActivity {
 
     Button startTrackingButton;
     EditText driverNameET;
+    LinearLayout driverActivityStatusLayout;
+    Switch driverActivityStatusSwitch;
+    TextView driverActivityStatusTV;
+    Button setNameButton;
+    ImageButton editNameButton;
 
-    boolean serviceStarted;
+    boolean inTrip;
+    boolean driverActive;
 
     private String name;
 
@@ -38,79 +52,154 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         bindViews();
         requestLocationPermissons();
-        // TODO: Get the status of the service once the app is started
-        if(LocationService.serviceIsRunning!=null){
-            serviceStarted = LocationService.serviceIsRunning;
-            if(serviceStarted){
-                driverNameET.setFocusable(false);
-                driverNameET.setText(getNameFromSharedPreferences(getApplicationContext()));
-                startTrackingButton.setText("Stop Tracking");
-            }
+
+
+        inTrip = getTripState(getApplicationContext());
+        driverActive = getDriverActivityState(getApplicationContext());
+
+        if(driverActive){
+            driverActivityStatusLayout.setBackgroundColor(Color.parseColor("#22CC33"));
+            driverActivityStatusTV.setText("Active");
         }else{
-            serviceStarted = false;
-            LocationService.serviceIsRunning = false;
+            driverActivityStatusLayout.setBackgroundColor(Color.parseColor("#FF5555"));
+            driverActivityStatusTV.setText("On Break");
+        }
+
+        driverActivityStatusSwitch.setChecked(driverActive);
+
+        driverActivityStatusSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+                if(b){
+                    storeDriverActivityState(getApplicationContext(),true);
+                    driverActivityStatusLayout.setBackgroundColor(Color.parseColor("#22CC33"));
+                    driverActivityStatusTV.setText("Active");
+                    driverActive = true;
+                }else{
+                    storeDriverActivityState(getApplicationContext(),false);
+                    driverActivityStatusLayout.setBackgroundColor(Color.parseColor("#FF5555"));
+                    driverActivityStatusTV.setText("On Break");
+                    driverActive = false;
+                }
+            }
+        });
+
+        if(inTrip){
+            driverNameET.setFocusable(false);
+            driverNameET.setText(getNameFromSharedPreferences(getApplicationContext()));
+            startTrackingButton.setText("End Trip");
         }
 
         name = getNameFromSharedPreferences(getApplicationContext());
 
-        if(!name.equals("Name")){
+        if(!name.equals("Name")&&!name.equals("")){
             driverNameET.setText(name);
+            driverNameET.setFocusable(false);
+            driverNameET.setClickable(false);
+            setNameButton.setVisibility(View.GONE);
+            editNameButton.setVisibility(View.VISIBLE);
+            LocationService.AlarmReceiver.scheduleAlarms(getApplicationContext());
         }
+
+        setNameButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (!TextUtils.isEmpty(driverNameET.getText())) {
+                    name = driverNameET.getText().toString();
+                    if(LocationService.serviceIsRunning==null) {
+                        LocationService.AlarmReceiver.scheduleAlarms(getApplicationContext());
+                    }else if(LocationService.serviceIsRunning == false){
+                        LocationService.AlarmReceiver.scheduleAlarms(getApplicationContext());
+                    }
+                    driverNameET.setFocusable(false);
+                    driverNameET.setClickable(false);
+                    putNameInSharedPreferences(getApplicationContext(),name);
+                    setNameButton.setVisibility(View.GONE);
+                    editNameButton.setVisibility(View.VISIBLE);
+                }else {
+                    driverNameET.setError("Please enter your full name");
+                }
+
+            }
+        });
+
+        editNameButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                driverNameET.setFocusableInTouchMode(true);
+                driverNameET.setClickable(true);
+                driverNameET.requestFocus();
+                editNameButton.setVisibility(View.GONE);
+                setNameButton.setVisibility(View.VISIBLE);
+
+            }
+        });
+
 
         startTrackingButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(!serviceStarted) {
+                if(!inTrip) {
                     if (!TextUtils.isEmpty(driverNameET.getText())) {
-                        name = driverNameET.getText().toString();
-                        putNameInSharedPreferences(MainActivity.this,name);
-                        Intent alarmIntent = new Intent(getApplicationContext(), LocationService.AlarmReceiver.class);
-                        alarmIntent.putExtra("Name",driverNameET.getText().toString());
-
-                        PendingIntent pi = PendingIntent.getBroadcast(getApplicationContext(), 0,alarmIntent,0);
-
-                        AlarmManager am=(AlarmManager)getApplicationContext().getSystemService(Context.ALARM_SERVICE);
-
-                        am.setRepeating(AlarmManager.RTC_WAKEUP, 10*1000, 3 * 1000,
-                                pi);
-
-                        EditText editText = (EditText) findViewById(R.id.driver_name_entry_edit_text);
-                        editText.setFocusable(false);
-                        editText.setClickable(false);
-                        startTrackingButton.setText("Stop Tracking");
-                        FirebaseDatabase.getInstance().getReference().child("Drivers").child(name).child("TrackingActive").setValue(true);
-                        serviceStarted = true;
-                        LocationService.serviceIsRunning = true;
+                        if(driverActive) {
+                            name = driverNameET.getText().toString();
+                            putNameInSharedPreferences(MainActivity.this, name);
+                            storeTripState(getApplicationContext(), true);
+//                        EditText editText = (EditText) findViewById(R.id.driver_name_entry_edit_text);
+//                        editText.setFocusable(false);
+//                        editText.setClickable(false);
+                            startTrackingButton.setText("End Trip");
+                            //FirebaseDatabase.getInstance().getReference().child("Drivers").child(name).child("TrackingActive").setValue(true);
+                            inTrip = true;
+                        }else{
+                            Toast.makeText(getApplicationContext(), "Change your status to active first",Toast.LENGTH_SHORT).show();
+                        }
                     } else {
                         driverNameET.setError("Please enter your name");
                     }
                 }else{
-                    Calendar mcal = Calendar.getInstance();
-                    Intent intent = new Intent(getApplicationContext(), LocationService.class);
-                    PendingIntent pendingIntent = PendingIntent.getBroadcast(getApplicationContext(), 1253, intent, 0);
-                    AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
-                    alarmManager.cancel(pendingIntent);
-                    pendingIntent.cancel();
-                    stopService(new Intent(getApplicationContext(),LocationService.class));
+                    storeTripState(getApplicationContext(),false);
+//                    Calendar mcal = Calendar.getInstance();
+//                    Intent intent = new Intent(getApplicationContext(), LocationService.class);
+//                    PendingIntent pendingIntent = PendingIntent.getBroadcast(getApplicationContext(), 1253, intent, 0);
+//                    AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+//                    alarmManager.cancel(pendingIntent);
+//                    pendingIntent.cancel();
+//                    stopService(new Intent(getApplicationContext(),LocationService.class));
 
-                    EditText editText = (EditText) findViewById(R.id.driver_name_entry_edit_text);
-                    editText.setFocusableInTouchMode(true);
-                    editText.setClickable(true);
-                    editText.requestFocus();
-                    startTrackingButton.setText("Start Tacking");
-                    serviceStarted = false;
-                    if(!name.equals("Name")) {
-                        FirebaseDatabase.getInstance().getReference().child("Drivers").child(name).child("TrackingActive").setValue(false);
-                    }
-                    LocationService.serviceIsRunning = false;
+                    startTrackingButton.setText("Start Trip");
+                    inTrip = false;
+//                    if(!name.equals("Name")) {
+//                        FirebaseDatabase.getInstance().getReference().child("Drivers").child(name).child("TrackingActive").setValue(false);
+//                    }
                 }
             }
         });
     }
 
+    void startTrackingService(String name){
+        driverNameET.setText(name);
+        setNameButton.setVisibility(View.GONE);
+        editNameButton.setVisibility(View.VISIBLE);
+        Intent alarmIntent = new Intent(getApplicationContext(), LocationService.AlarmReceiver.class);
+        alarmIntent.putExtra("Name",name);
+
+        PendingIntent pi = PendingIntent.getBroadcast(getApplicationContext(), 0,alarmIntent,0);
+
+        AlarmManager am=(AlarmManager)getApplicationContext().getSystemService(Context.ALARM_SERVICE);
+
+        am.setRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime()+3*1000, 3 * 1000,
+                pi);
+    }
+
     void bindViews(){
         startTrackingButton = (Button) findViewById(R.id.start_tracking);
         driverNameET = (EditText) findViewById(R.id.driver_name_entry_edit_text);
+        driverActivityStatusLayout = (LinearLayout) findViewById(R.id.driver_activity_status_layout);
+        driverActivityStatusSwitch = (Switch) findViewById(R.id.driver_activity_status_switch);
+        driverActivityStatusTV = (TextView) findViewById(R.id.driver_activity_status_text_view);
+        setNameButton = (Button) findViewById(R.id.set_name_button);
+        editNameButton = (ImageButton) findViewById(R.id.edit_name_image_button);
     }
 
     static void putNameInSharedPreferences(Context context,String name){
@@ -120,21 +209,33 @@ public class MainActivity extends AppCompatActivity {
         namePrefsEditor.commit();
     }
 
-    static void storeServiceState(Context context,Boolean running){
+    static void storeTripState(Context context,Boolean inTrip){
         SharedPreferences namePrefs= PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor namePrefsEditor = namePrefs.edit();
-        namePrefsEditor.putBoolean("ServiceState",running);
+        namePrefsEditor.putBoolean("TripState",inTrip);
         namePrefsEditor.commit();
     }
 
-    static void getServiceState(Context context){
+    static boolean getTripState(Context context){
         SharedPreferences namePrefs= PreferenceManager.getDefaultSharedPreferences(context);
-        namePrefs.getBoolean("ServiceState",false);
+        return namePrefs.getBoolean("TripState",false);
     }
 
     static String getNameFromSharedPreferences(Context context){
         SharedPreferences namePrefs= PreferenceManager.getDefaultSharedPreferences(context);
         return namePrefs.getString("Name","Name");
+    }
+
+    static void storeDriverActivityState(Context context,Boolean active){
+        SharedPreferences namePrefs= PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor namePrefsEditor = namePrefs.edit();
+        namePrefsEditor.putBoolean("DriverActivityState",active);
+        namePrefsEditor.commit();
+    }
+
+    static boolean getDriverActivityState(Context context){
+        SharedPreferences namePrefs= PreferenceManager.getDefaultSharedPreferences(context);
+        return namePrefs.getBoolean("DriverActivityState",false);
     }
 
     //request loaction permissons

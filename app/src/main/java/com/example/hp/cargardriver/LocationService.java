@@ -3,6 +3,7 @@ package com.example.hp.cargardriver;
 import android.*;
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.IntentService;
 import android.app.KeyguardManager;
 import android.app.Notification;
@@ -22,6 +23,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.SystemClock;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
@@ -80,13 +83,13 @@ public class LocationService extends IntentService implements GoogleApiClient.Co
                     .build();
         }
 
-        Notification notification = new NotificationCompat.Builder(this)
-                .setContentTitle("nkDroid Music Player")
-                .setTicker("nkDroid Music Player")
-                .setContentText("nkDroid Music")
-                .setSmallIcon(android.R.mipmap.sym_def_app_icon)
-                .setLargeIcon(BitmapFactory.decodeResource(getResources(), android.R.drawable.ic_delete))
-                .setOngoing(true).build();
+//        Notification notification = new NotificationCompat.Builder(this)
+//                .setContentTitle("nkDroid Music Player")
+//                .setTicker("nkDroid Music Player")
+//                .setContentText("nkDroid Music")
+//                .setSmallIcon(android.R.mipmap.sym_def_app_icon)
+//                .setLargeIcon(BitmapFactory.decodeResource(getResources(), android.R.drawable.ic_delete))
+//                .setOngoing(true).build();
 
         mGoogleApiClient.connect();
 
@@ -124,8 +127,8 @@ public class LocationService extends IntentService implements GoogleApiClient.Co
             Log.e("Location: ", " Location was null");
         }
         mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(1000);
-        mLocationRequest.setFastestInterval(1000);
+        mLocationRequest.setInterval(3000);
+        mLocationRequest.setFastestInterval(3000);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         LocationServices.FusedLocationApi.requestLocationUpdates(
                 mGoogleApiClient, mLocationRequest, this);
@@ -141,19 +144,43 @@ public class LocationService extends IntentService implements GoogleApiClient.Co
     @Override
     public void onLocationChanged(Location location) {
         if(location!=null){
-            Log.v("CurrentLoc: ",name+" "+location.getLatitude()+" "+location.getLongitude());
+            Log.v("CurrentLoc: ", MainActivity.getNameFromSharedPreferences(getApplicationContext())+" " +
+                            location.getLatitude()+" "+
+                            location.getLongitude()+" "+
+                            location.getTime()+" "+
+                    MainActivity.getTripState(getApplicationContext())+" "+
+                    MainActivity.getDriverActivityState(getApplicationContext()));
+
+            Data data = new Data(
+                    location.getLatitude(),
+                    location.getLongitude(),
+                    location.getTime(),
+                    MainActivity.getTripState(getApplicationContext()),
+                    MainActivity.getDriverActivityState(getApplicationContext())
+            );
             FirebaseDatabase.getInstance().getReference().
                     child("Drivers").
-                    child(name).
-                    child("location").
-                    child("lat").
-                    setValue(location.getLatitude());
+                    child(MainActivity.getNameFromSharedPreferences(getApplicationContext())).
+                    child("data").push().
+                    setValue(data);
+        }else{
+            Log.v("CurrentLoc: ",MainActivity.getNameFromSharedPreferences(getApplicationContext())+" "+
+                    "null"+" "+"null"+" "+
+                    System.currentTimeMillis()+" "+
+                    MainActivity.getTripState(getApplicationContext())+" "+
+                    MainActivity.getDriverActivityState(getApplicationContext()));
+            Data data = new Data(
+                    -1.0,
+                    -1.0,
+                    System.currentTimeMillis(),
+                    MainActivity.getTripState(getApplicationContext()),
+                    MainActivity.getDriverActivityState(getApplicationContext())
+            );
             FirebaseDatabase.getInstance().getReference().
                     child("Drivers").
-                    child(name).
-                    child("location").
-                    child("lng").
-                    setValue(location.getLongitude());
+                    child(MainActivity.getNameFromSharedPreferences(getApplicationContext())).
+                    child("data").push().
+                    setValue(data);
         }
     }
 
@@ -165,11 +192,35 @@ public class LocationService extends IntentService implements GoogleApiClient.Co
 
     public static class AlarmReceiver extends BroadcastReceiver {
 
+        static AlarmManager mgr;
+
         @Override
         public void onReceive(Context context, Intent intent) {
-            Intent sendIntent = new Intent(context, LocationService.class);
-            sendIntent.putExtra("Name",intent.getStringExtra("Name"));
-            context.startService(sendIntent);
+            scheduleAlarms(context);
+        }
+
+        static void scheduleAlarms(Context ctxt) {
+            if(mgr==null) {
+                mgr = (AlarmManager) ctxt.getSystemService(Context.ALARM_SERVICE);
+            }
+            Intent i=new Intent(ctxt, LocationService.class);
+            i.putExtra("Name",MainActivity.getNameFromSharedPreferences(ctxt.getApplicationContext()));
+            PendingIntent pi=PendingIntent.getService(ctxt, 0, i, PendingIntent.FLAG_UPDATE_CURRENT);
+
+            mgr.setRepeating(AlarmManager.ELAPSED_REALTIME,
+                    SystemClock.elapsedRealtime() + 3000, 3000, pi);
+        }
+
+        static void cancelAlarm(Context context){
+            if(mgr==null) {
+                mgr = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            }
+            context.stopService(new Intent(context,LocationService.class));
+            Intent i=new Intent(context, LocationService.class);
+            i.putExtra("Name",MainActivity.getNameFromSharedPreferences(context.getApplicationContext()));
+            PendingIntent pi=PendingIntent.getService(context, 0, i, PendingIntent.FLAG_CANCEL_CURRENT);
+
+            mgr.cancel(pi);
         }
     }
 
